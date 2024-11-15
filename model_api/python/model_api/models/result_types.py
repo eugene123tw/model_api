@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import NamedTuple
 
 import cv2
 import numpy as np
@@ -108,19 +107,48 @@ class Detection:
         return f"{self.xmin}, {self.ymin}, {self.xmax}, {self.ymax}, {self.id} ({self.str_label}): {self.score:.3f}"
 
 
-class DetectionResult(Detection, Result):
+class DetectionResult(Result):
     """Result for detection model."""
 
-    objects: list[Detection] | None = None
-    saliency_map: np.ndarray | None = None
-    feature_vector: np.ndarray | None = None
+    def __init__(
+        self,
+        bboxes: np.ndarray,
+        labels: np.ndarray | list[int],
+        scores: np.ndarray | list[float] | None = None,
+        label_names: list[str] | None = None,
+        saliency_map: np.ndarray | None = None,
+        feature_vector: np.ndarray | None = None,
+    ):
+        super().__init__()
+        self.bboxes = bboxes
+        self.labels = labels
+        self.scores = scores if scores is not None else [None] * len(labels)
+        self.label_names = None if label_names is None else label_names
+        self.saliency_map = saliency_map
+        self.feature_vector = feature_vector
 
     def __str__(self):
-        assert self.objects is not None
-        obj_str = "; ".join(str(obj) for obj in self.objects)
-        if obj_str:
-            obj_str += "; "
-        return f"{obj_str}{_array_shape_to_str(self.saliency_map)}; {_array_shape_to_str(self.feature_vector)}"
+        return (
+            f"bboxes: {self.bboxes.shape}, "
+            f"labels: {len(self.labels)}, "
+            f"scores: {len(self.scores)}, "
+            f"{_array_shape_to_str(self.saliency_map)}, "
+            f"{_array_shape_to_str(self.feature_vector)}"
+        )
+
+    def _register_primitives(self) -> None:
+        for bbox, label, score in zip(
+            self.bboxes,
+            self.labels,
+            self.scores,
+            strict=True,
+        ):
+            label_str = self.label_names.index(label) if self.label_names is not None else "label"
+            self._add_primitive(BoundingBoxes(*bbox))
+            if score is not None:
+                self._add_primitive(Label(f"{label_str}: {score:.3f}"))
+            else:
+                self._add_primitive(Label(f"{label_str}"))
 
 
 class DetectedKeypoints:
